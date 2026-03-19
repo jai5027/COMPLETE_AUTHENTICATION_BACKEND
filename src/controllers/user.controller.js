@@ -1,6 +1,7 @@
 const userModel = require('../models/user.model.js')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const sessionModel = require('../models/session.model.js')
 
 async function userRegister(req, res){
 
@@ -29,6 +30,15 @@ async function userRegister(req, res){
     const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, 
         { expiresIn: "7d" })
 
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10)     
+
+    const session = await sessionModel.create({
+          user: user._id,
+          refreshTokenHash,
+          ip: req.ip,
+          userAgent: req.headers["user-agent"],
+    })    
+
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: true,
@@ -36,7 +46,7 @@ async function userRegister(req, res){
             maxAge: 7 * 24 * 60 * 60 * 1000
         })
 
-    const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, 
+    const accessToken = jwt.sign({ id: user._id, session: session._id }, process.env.JWT_SECRET, 
         { expiresIn: "15m" })  
         
     res.status(201).json({
