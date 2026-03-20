@@ -3,6 +3,9 @@ const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const sessionModel = require('../models/session.model.js')
 const crypto = require("crypto")
+const { sendEmail } = require('../services/email.service.js')
+const { generateOTP, getOtpHtml } = require('../utils/otp.util.js')
+const otpModel = require('../models/otp.model.js')
 
 async function userRegister(req, res){
 
@@ -28,39 +31,52 @@ async function userRegister(req, res){
         username, email, password: hash
     })
 
-     const refreshToken = jwt.sign({
-        id: user._id
-    }, process.env.JWT_SECRET, { expiresIn: "7d" })
+    const otp = generateOTP()
+    const html = getOtpHtml(otp)
 
-    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex")
+
+    await otpModel.create({
+        email,
+        user: user._id,
+        otpHash
+    })
+
+    await sendEmail(email, "OTP Verification", "Your OTP code is: " + otp, html)
+
+    //  const refreshToken = jwt.sign({
+    //     id: user._id
+    // }, process.env.JWT_SECRET, { expiresIn: "7d" })
+
+    // const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
  
-    const session = await sessionModel.create({
-          user: user._id,
-          refreshTokenHash,
-          ip: req.ip,
-          userAgent: req.headers[ "user-agent" ]
-    })
+    // const session = await sessionModel.create({
+    //       user: user._id,
+    //       refreshTokenHash,
+    //       ip: req.ip,
+    //       userAgent: req.headers[ "user-agent" ]
+    // })
 
-    const accessToken = jwt.sign({ 
-         id: user._id,
-         session: session._id
-     }, process.env.JWT_SECRET, { expiresIn: "15m" })
+    // const accessToken = jwt.sign({ 
+    //      id: user._id,
+    //      session: session._id
+    //  }, process.env.JWT_SECRET, { expiresIn: "15m" })
     
-    res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1000
-    })
+    // res.cookie("refreshToken", refreshToken, {
+    //     httpOnly: true,
+    //     secure: true,
+    //     sameSite: "strict",
+    //     maxAge: 7 * 24 * 60 * 60 * 1000
+    // })
 
     res.status(201).json({
         message: "user created successfully",
         user:{
             id: user._id,
             username: user.username,
-            email: user.email
-        },
-        accessToken
+            email: user.email,
+            verified: user.verified
+        }
     })    
 
 }
@@ -79,6 +95,12 @@ async function userLogin(req, res){
     if(!user){
         return res.status(401).json({
             message: "Invalid email and password"
+        })
+    }
+
+    if(!user.verified){
+        return res.status(401).json({
+            message: "Please verify your email to login"
         })
     }
 
