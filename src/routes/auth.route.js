@@ -12,4 +12,6 @@ router.get('/logout', authController.userLogout)
 
 router.get('/logoutAll', authController.userLogoutAll)
 
+router.get('/verify-email', authController.verifyEmail)
+
 module.exports = router
