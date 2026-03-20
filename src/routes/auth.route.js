@@ -4,6 +4,8 @@ const authController = require('../controllers/user.controller.js')
 
 router.post('/register', authController.userRegister)
 
-router.post('/refresh-token', authController.refreshToken)
+router.get('/refresh-token', authController.refreshToken)
+
+router.get('/logout', authController.userLogout)
 
 module.exports = router

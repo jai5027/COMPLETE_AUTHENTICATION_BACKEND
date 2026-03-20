@@ -27,28 +27,31 @@ async function userRegister(req, res){
         username, email, password: hash
     })
 
-    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, 
-        { expiresIn: "7d" })
+     const refreshToken = jwt.sign({
+        id: user._id
+    }, process.env.JWT_SECRET, { expiresIn: "7d" })
 
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10)     
-
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
+ 
     const session = await sessionModel.create({
           user: user._id,
           refreshTokenHash,
           ip: req.ip,
-          userAgent: req.headers["user-agent"],
-    })    
+          userAgent: req.headers[ "user-agent" ]
+    })
 
-        res.cookie("refreshToken", refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "strict",
-            maxAge: 7 * 24 * 60 * 60 * 1000
-        })
+    const accessToken = jwt.sign({ 
+         id: user._id,
+         session: session._id
+     }, process.env.JWT_SECRET, { expiresIn: "15m" })
+    
+    res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    })
 
-    const accessToken = jwt.sign({ id: user._id, session: session._id }, process.env.JWT_SECRET, 
-        { expiresIn: "15m" })  
-        
     res.status(201).json({
         message: "user created successfully",
         user:{
@@ -62,35 +65,82 @@ async function userRegister(req, res){
 }
 
 async function refreshToken(req, res){
+
     const refreshToken = req.cookies.refreshToken
 
     if(!refreshToken){
         return res.status(401).json({
-            message: "unauthorized"
+            message: "Refresh token not found"
         })
     }
+
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET)
 
-    const accessToken = jwt.sign({
-          id: decoded.id
-    }, process.env.JWT_SECRET, { expiresIn: "15m" })
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
 
-    const newRefreshToken = jwt.sign({
-        id: decoded.id
-    }, process.env.JWT_SECRET, { expiresIn: "7d" })
+    const session = await sessionModel.findOne({
+        refreshTokenHash,
+        revoked: false
+    })
 
-    res.cookie("newRefreshToken", newRefreshToken, {
+    if(!session){
+        return res.status(401).json({
+            message: "Invalid refresh token"
+        })
+    }
+
+    const accessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: "15m" })
+
+     const newRefreshToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: "7d" })
+
+     const newRefreshTokenHash = crypto.createHash("sha256").update(newRefreshToken).digest("hes")
+
+     session.refreshTokenHash = newRefreshTokenHash
+     await session.save()
+
+    res.cookie("newrefreshToken", newRefreshToken, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        masAge: 7 * 24 * 60 * 60 * 1000
     })
 
     res.status(200).json({
-        message: "Access token refreshed successfully",
+        message: "Access token refresh successfully",
         accessToken
     })
+}
 
+async function userLogout(req, res){
+    const refreshToken = req.cookies.refreshToken
+
+    if(!refreshToken){
+        return res.status(400).json({
+          message: "refreshToken not found"
+        })
+    }
+
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
+
+    const session = await sessionModel.findOne({
+          refreshTokenHash,
+          revoked: false
+    })
+
+    if(!session){
+        return res.status(400).json({
+            message: "Invalid refreshToken"
+        })
+    }
+
+    session.revoked = true;
+    await session.save()
+
+    res.clearCookie("refreshToken")
+
+    res.status(200).json({
+        message: "user logout successfully"
+    })
 }
 
 module.exports = { userRegister, refreshToken }

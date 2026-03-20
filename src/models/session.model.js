@@ -9,12 +9,12 @@ const sessionSchema = new mongoose.Schema({
 
       refreshTokenHash: {
         type: String,
-        required: [true, "refreshtoken is required"]
+        required: [true, "Refresh Token hash is required"]
       },
 
       ip: {
         type: String,
-        required: [true, "ip is required"]
+        required: [true, "IP address is required"]
       },
 
       userAgent: {
@@ -22,15 +22,14 @@ const sessionSchema = new mongoose.Schema({
         required: [true, "userAgent is required"]
       },
 
-      revoke: {
+      revoked: {
         type: Boolean,
         default: false
-      }, 
+      }
 }, {
     timestamps: true
 })
 
+const sessionModel = mongoose.model("session", sessionSchema)
 
-
-const sessionModel = mongoose.model("sessions", sessionSchema)
 module.exports = sessionModel
